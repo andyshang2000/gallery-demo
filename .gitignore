@@ -1,0 +1,9 @@
+/__pycache__
+/.idea
+/*.db
+/s4399/__pycache__
+/s4399/spiders/__pycache__
+/douban.json
+/s4399/db/__pycache__/*.pyc
+/s4399/db/*.db
+/build
