@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.annotation.Nullable;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
 import android.support.design.widget.Snackbar;
@@ -16,14 +17,24 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.graphics.Palette;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.etiennelawlor.imagegallery.library.activities.FullScreenImageGalleryActivity;
 import com.etiennelawlor.imagegallery.library.adapters.FullScreenImageGalleryAdapter;
 import com.etiennelawlor.imagegallery.library.enums.PaletteColorType;
@@ -50,19 +61,45 @@ public class MainActivity extends AppCompatActivity
 
     private static final String TAG = "MainActivity";
     private PullRecyclerView recyclerView;
-    private ArrayList<String> mDataList = new ArrayList<>();
+    private ArrayList<Joke> mDataList = new ArrayList<>();
     private int pageIndex = 1;
     private int pageSize = 5;
     private GridListAdapter mAdapter;
+    private String cat = "";
+    private int currentCat;
+    private AsyncHttpClient client = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         setContentView(R.layout.activity_main);
+
+        client = new AsyncHttpClient();
+        currentCat = R.id.cat_all;
+
+        setupToolBar();
+        setupFloatActionButton();
+
+        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        navigationView.setNavigationItemSelectedListener(this);
+
+        FullScreenImageGalleryActivity.setFullScreenImageLoader(this);
+
+        createGridOn(R.id.rv);
+    }
+
+    private void setupToolBar() {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        final DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
+        drawer.addDrawerListener(toggle);
+        toggle.syncState();
+    }
+
+    private void setupFloatActionButton() {
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -71,28 +108,6 @@ public class MainActivity extends AppCompatActivity
                         .setAction("Action", null).show();
             }
         });
-
-        final DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
-        drawer.addDrawerListener(toggle);
-        toggle.syncState();
-
-        new Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                drawer.openDrawer(Gravity.LEFT);
-            }
-        }, 1000);
-
-        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
-        navigationView.setNavigationItemSelectedListener(this);
-
-        //gallery
-        paletteColorType = PaletteColorType.VIBRANT;
-        FullScreenImageGalleryActivity.setFullScreenImageLoader(this);
-
-        createGridOn(R.id.rv);
     }
 
     private void createGridOn(int app_content) {
@@ -107,44 +122,16 @@ public class MainActivity extends AppCompatActivity
         recyclerView.enablePullRefresh(true); // 开启下拉刷新，默认即为true，可不用设置
         recyclerView.enableLoadDoneTip(true, R.string.load_done_tip); // 开启数据全部加载完成时的底部提示，默认为false
         recyclerView.setOnRecyclerRefreshListener(new PullRecyclerView.OnRecyclerRefreshListener() {
-            final AsyncHttpClient client = new AsyncHttpClient();
             @Override
             public void onPullRefresh() {
                 // 模拟下拉刷新网络请求
-                client.get("http://192.168.0.103:50001/api/p/1?c=%E5%A5%87%E9%97%BB%E6%80%AA%E4%BA%8B", new JsonHttpResponseHandler() {
-                    @Override
-                    public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
-                        super.onSuccess(statusCode, headers, response);
-                        try {
-                            pageSize = response.getInt("pages");
-                            JSONArray items = response.getJSONArray("items");
-                            mDataList.clear();
-                            for (int i = 0; i < items.length(); i++) {
-                                JSONObject o = items.getJSONObject(i);
-                                mDataList.add("http://192.168.0.103:8081/images/" + o.getString("image"));
-                            }
-                            mAdapter.notifyDataSetChanged();
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        } finally {
-                            recyclerView.stopRefresh();
-                            recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
-                        }
-                    }
-
-                    @Override
-                    public void onFailure(int statusCode, Header[] headers, String responseString, Throwable throwable) {
-                        super.onFailure(statusCode, headers, responseString, throwable);
-                        recyclerView.stopRefresh();
-                        recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
-                    }
-                });
+                refresh();
             }
 
             @Override
             public void onLoadMore() {
                 pageIndex++;
-                client.get("http://192.168.0.103:50001/api/p/" + pageIndex + "?c=%E5%A5%87%E9%97%BB%E6%80%AA%E4%BA%8B", new JsonHttpResponseHandler() {
+                client.get("http://192.168.0.103:50001/api/p/" + pageIndex + "?c=" + cat, new JsonHttpResponseHandler() {
                     @Override
                     public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
                         super.onSuccess(statusCode, headers, response);
@@ -153,7 +140,7 @@ public class MainActivity extends AppCompatActivity
                             JSONArray items = response.getJSONArray("items");
                             for (int i = 0; i < items.length(); i++) {
                                 JSONObject o = items.getJSONObject(i);
-                                mDataList.add("http://192.168.0.103:8081/images/" + o.getString("image"));
+                                mDataList.add(new Joke(o));
                             }
                             mAdapter.notifyItemInserted(mAdapter.getItemCount());
                         } catch (JSONException e) {
@@ -174,6 +161,36 @@ public class MainActivity extends AppCompatActivity
             }
         });
         recyclerView.postRefreshing();
+    }
+
+    private void refresh() {
+        client.get("http://192.168.0.103:50001/api/p/1?c=" + cat, new JsonHttpResponseHandler() {
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
+                super.onSuccess(statusCode, headers, response);
+                try {
+                    pageSize = response.getInt("pages");
+                    JSONArray items = response.getJSONArray("items");
+                    mDataList.clear();
+                    for (int i = 0; i < items.length(); i++) {
+                        mDataList.add(new Joke(items.getJSONObject(i)));
+                    }
+                    mAdapter.notifyDataSetChanged();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                } finally {
+                    recyclerView.stopRefresh();
+                    recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+                }
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, String responseString, Throwable throwable) {
+                super.onFailure(statusCode, headers, responseString, throwable);
+                recyclerView.stopRefresh();
+                recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+            }
+        });
     }
 
 
@@ -215,20 +232,18 @@ public class MainActivity extends AppCompatActivity
         // Handle navigation view item clicks here.
         int id = item.getItemId();
 
-        if (id == R.id.nav_camera) {
-            // Handle the camera action
-        } else if (id == R.id.nav_gallery) {
-
-        } else if (id == R.id.nav_slideshow) {
-
-        } else if (id == R.id.nav_manage) {
-
-        } else if (id == R.id.nav_share) {
-
-        } else if (id == R.id.nav_send) {
-
+        if (id != currentCat) {
+            if (id == R.id.cat_all) {
+                cat = "";
+            } else if (id == R.id.cat_gif) {
+                cat = "搞笑GIF";
+            } else if (id == R.id.cat_text) {
+                cat = "幽默笑话";
+            } else if (id == R.id.cat_images) {
+                cat = "奇闻怪事";
+            }
+            refresh();
         }
-
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
@@ -237,164 +252,62 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void loadFullScreenImage(final ImageView iv, String imageUrl, int width, final LinearLayout bgLinearLayout) {
         if (!TextUtils.isEmpty(imageUrl)) {
-            Picasso.with(iv.getContext())
+            Glide.with(iv.getContext())
                     .load(imageUrl)
-                    .resize(width, 0)
-                    .into(iv, new Callback() {
-                        @Override
-                        public void onSuccess() {
-                            Bitmap bitmap = ((BitmapDrawable) iv.getDrawable()).getBitmap();
-                            Palette.from(bitmap).generate(new Palette.PaletteAsyncListener() {
-                                public void onGenerated(Palette palette) {
-                                    applyPalette(palette, bgLinearLayout);
-                                }
-                            });
-                        }
-
-                        @Override
-                        public void onError() {
-
-                        }
-                    });
+                    .listener(mRequestListener)
+                    .into(iv);
         } else {
             iv.setImageDrawable(null);
         }
     }
 
-    private void applyPalette(Palette palette, ViewGroup viewGroup) {
-        int bgColor = getBackgroundColor(palette);
-        if (bgColor != -1)
-            viewGroup.setBackgroundColor(bgColor);
-    }
-
-    private PaletteColorType paletteColorType;
-
-    private int getBackgroundColor(Palette palette) {
-        int bgColor = -1;
-
-        int vibrantColor = palette.getVibrantColor(0x000000);
-        int lightVibrantColor = palette.getLightVibrantColor(0x000000);
-        int darkVibrantColor = palette.getDarkVibrantColor(0x000000);
-
-        int mutedColor = palette.getMutedColor(0x000000);
-        int lightMutedColor = palette.getLightMutedColor(0x000000);
-        int darkMutedColor = palette.getDarkMutedColor(0x000000);
-
-        if (paletteColorType != null) {
-            switch (paletteColorType) {
-                case VIBRANT:
-                    if (vibrantColor != 0) { // primary option
-                        bgColor = vibrantColor;
-                    } else if (lightVibrantColor != 0) { // fallback options
-                        bgColor = lightVibrantColor;
-                    } else if (darkVibrantColor != 0) {
-                        bgColor = darkVibrantColor;
-                    } else if (mutedColor != 0) {
-                        bgColor = mutedColor;
-                    } else if (lightMutedColor != 0) {
-                        bgColor = lightMutedColor;
-                    } else if (darkMutedColor != 0) {
-                        bgColor = darkMutedColor;
-                    }
-                    break;
-                case LIGHT_VIBRANT:
-                    if (lightVibrantColor != 0) { // primary option
-                        bgColor = lightVibrantColor;
-                    } else if (vibrantColor != 0) { // fallback options
-                        bgColor = vibrantColor;
-                    } else if (darkVibrantColor != 0) {
-                        bgColor = darkVibrantColor;
-                    } else if (mutedColor != 0) {
-                        bgColor = mutedColor;
-                    } else if (lightMutedColor != 0) {
-                        bgColor = lightMutedColor;
-                    } else if (darkMutedColor != 0) {
-                        bgColor = darkMutedColor;
-                    }
-                    break;
-                case DARK_VIBRANT:
-                    if (darkVibrantColor != 0) { // primary option
-                        bgColor = darkVibrantColor;
-                    } else if (vibrantColor != 0) { // fallback options
-                        bgColor = vibrantColor;
-                    } else if (lightVibrantColor != 0) {
-                        bgColor = lightVibrantColor;
-                    } else if (mutedColor != 0) {
-                        bgColor = mutedColor;
-                    } else if (lightMutedColor != 0) {
-                        bgColor = lightMutedColor;
-                    } else if (darkMutedColor != 0) {
-                        bgColor = darkMutedColor;
-                    }
-                    break;
-                case MUTED:
-                    if (mutedColor != 0) { // primary option
-                        bgColor = mutedColor;
-                    } else if (lightMutedColor != 0) { // fallback options
-                        bgColor = lightMutedColor;
-                    } else if (darkMutedColor != 0) {
-                        bgColor = darkMutedColor;
-                    } else if (vibrantColor != 0) {
-                        bgColor = vibrantColor;
-                    } else if (lightVibrantColor != 0) {
-                        bgColor = lightVibrantColor;
-                    } else if (darkVibrantColor != 0) {
-                        bgColor = darkVibrantColor;
-                    }
-                    break;
-                case LIGHT_MUTED:
-                    if (lightMutedColor != 0) { // primary option
-                        bgColor = lightMutedColor;
-                    } else if (mutedColor != 0) { // fallback options
-                        bgColor = mutedColor;
-                    } else if (darkMutedColor != 0) {
-                        bgColor = darkMutedColor;
-                    } else if (vibrantColor != 0) {
-                        bgColor = vibrantColor;
-                    } else if (lightVibrantColor != 0) {
-                        bgColor = lightVibrantColor;
-                    } else if (darkVibrantColor != 0) {
-                        bgColor = darkVibrantColor;
-                    }
-                    break;
-                case DARK_MUTED:
-                    if (darkMutedColor != 0) { // primary option
-                        bgColor = darkMutedColor;
-                    } else if (mutedColor != 0) { // fallback options
-                        bgColor = mutedColor;
-                    } else if (lightMutedColor != 0) {
-                        bgColor = lightMutedColor;
-                    } else if (vibrantColor != 0) {
-                        bgColor = vibrantColor;
-                    } else if (lightVibrantColor != 0) {
-                        bgColor = lightVibrantColor;
-                    } else if (darkVibrantColor != 0) {
-                        bgColor = darkVibrantColor;
-                    }
-                    break;
-                default:
-                    break;
-            }
+    RequestListener mRequestListener = new RequestListener() {
+        @Override
+        public boolean onLoadFailed(@Nullable GlideException e, Object model, Target target, boolean isFirstResource) {
+            Log.d(TAG, "onException: " + e.toString() + "  model:" + model + " isFirstResource: " + isFirstResource);
+            return false;
         }
 
-        return bgColor;
-    }
+        @Override
+        public boolean onResourceReady(Object resource, Object model, Target target, DataSource dataSource, boolean isFirstResource) {
+            Log.e(TAG, "model:" + model + " isFirstResource: " + isFirstResource);
+            return false;
+        }
+    };
 
-    class GridListAdapter extends BaseRecyclerAdapter<String> {
+    class GridListAdapter<T> extends BaseRecyclerAdapter<T> {
 
-        public GridListAdapter(Context context, int layoutResId, List<String> data) {
+        public GridListAdapter(Context context, int layoutResId, List<T> data) {
             super(context, layoutResId, data);
         }
 
         @Override
-        protected void convert(BaseViewHolder holder, final String item, final int pos) {
+        protected void convert(BaseViewHolder holder, final T item, final int pos) {
             ImageView avatarView = holder.getView(R.id.iv);
-
-            if (!TextUtils.isEmpty(item)) {
+            TextView text = holder.getView(R.id.text_content);
+            final Animation animation = AnimationUtils.loadAnimation(getBaseContext(), R.anim.add_score);
+            Button zan_btn = holder.getView(R.id.zan_btn);
+            final TextView addOne = holder.getView(R.id.addOne_tv);
+            //  按钮点击 触发动画
+            zan_btn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    addOne.setVisibility(View.VISIBLE);
+                    addOne.startAnimation(animation);
+                    new Handler().postDelayed(new Runnable() {
+                        public void run() {
+                            addOne.setVisibility(View.GONE);
+                        }
+                    }, 1000);
+                }
+            });
+            Joke joke = (Joke) item;
+            text.setText(joke.text);
+            if (!TextUtils.isEmpty(joke.image)) {
                 Picasso.with(mContext)
-                        .load(item)
-                        .resize(100, 200)
-                        .centerCrop()
+                        .load(joke.image)
+//                        .resize(100, 200)
+//                        .centerCrop()
                         .into(avatarView);
             } else {
                 avatarView.setImageDrawable(null);
@@ -405,7 +318,7 @@ public class MainActivity extends AppCompatActivity
                 public void onClick(View view) {
                     Intent intent = new Intent(MainActivity.this, FullScreenImageGalleryActivity.class);
                     Bundle bundle = new Bundle();
-                    bundle.putStringArrayList(FullScreenImageGalleryActivity.KEY_IMAGES, mDataList);
+                    bundle.putStringArrayList(FullScreenImageGalleryActivity.KEY_IMAGES, extractImages());
                     bundle.putInt(FullScreenImageGalleryActivity.KEY_POSITION, pos);
                     intent.putExtras(bundle);
 
@@ -413,5 +326,34 @@ public class MainActivity extends AppCompatActivity
                 }
             });
         }
+
+        private ArrayList<String> extractImages() {
+            ArrayList<String> list = new ArrayList<>();
+            for (int i = 0; i < mDataList.size(); i++) {
+                list.add(mDataList.get(i).image);
+            }
+            return list;
+        }
+    }
+
+    private class Joke {
+        public String image;
+        public String text;
+        public List<Comment> comments;
+
+
+        public Joke(JSONObject o) {
+            try {
+                image = "http://192.168.0.103:8081/images/" + o.getString("image");
+                text = o.getString("text");
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private class Comment {
+        public String text;
+        public String type;
     }
 }

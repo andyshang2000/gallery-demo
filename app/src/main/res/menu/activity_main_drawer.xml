@@ -1,25 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-
     <group android:checkableBehavior="single">
         <item
-            android:id="@+id/nav_camera"
+            android:id="@+id/cat_all"
             android:icon="@drawable/ic_menu_camera"
-            android:title="Import" />
+            android:title="新鲜事" />
         <item
-            android:id="@+id/nav_gallery"
+            android:id="@+id/cat_gif"
             android:icon="@drawable/ic_menu_gallery"
-            android:title="Gallery" />
+            android:title="搞笑GIF" />
         <item
-            android:id="@+id/nav_slideshow"
+            android:id="@+id/cat_text"
             android:icon="@drawable/ic_menu_slideshow"
-            android:title="Slideshow" />
+            android:title="幽默笑话" />
         <item
-            android:id="@+id/nav_manage"
-            android:icon="@drawable/ic_menu_manage"
-            android:title="Tools" />
+            android:id="@+id/cat_images"
+            android:icon="@drawable/ic_menu_slideshow"
+            android:title="奇闻怪事" />
     </group>
-
     <item android:title="Communicate">
         <menu>
             <item
