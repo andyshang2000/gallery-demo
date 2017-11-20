@@ -132,7 +132,7 @@ public class FullScreenImageGalleryActivity extends AppCompatActivity implements
             int totalPages = viewPager.getAdapter().getCount();
 
             ActionBar actionBar = getSupportActionBar();
-            if(actionBar != null){
+            if (actionBar != null) {
                 actionBar.setTitle(String.format("%d/%d", (position + 1), totalPages));
             }
         }

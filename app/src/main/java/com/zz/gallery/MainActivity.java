@@ -2,8 +2,6 @@ package com.zz.gallery;
 
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.Nullable;
@@ -14,15 +12,12 @@ import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.graphics.Palette;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
@@ -37,15 +32,12 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.etiennelawlor.imagegallery.library.activities.FullScreenImageGalleryActivity;
 import com.etiennelawlor.imagegallery.library.adapters.FullScreenImageGalleryAdapter;
-import com.etiennelawlor.imagegallery.library.enums.PaletteColorType;
 import com.holenzhou.pullrecyclerview.BaseRecyclerAdapter;
 import com.holenzhou.pullrecyclerview.BaseViewHolder;
 import com.holenzhou.pullrecyclerview.PullRecyclerView;
 import com.holenzhou.pullrecyclerview.layoutmanager.XLinearLayoutManager;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.JsonHttpResponseHandler;
-import com.squareup.picasso.Callback;
-import com.squareup.picasso.Picasso;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -68,6 +60,7 @@ public class MainActivity extends AppCompatActivity
     private String cat = "";
     private int currentCat;
     private AsyncHttpClient client = null;
+    private Handler handler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,6 +68,7 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
 
         client = new AsyncHttpClient();
+        handler = new Handler();
         currentCat = R.id.cat_all;
 
         setupToolBar();
@@ -130,6 +124,7 @@ public class MainActivity extends AppCompatActivity
 
             @Override
             public void onLoadMore() {
+
                 pageIndex++;
                 client.get("http://192.168.0.103:50001/api/p/" + pageIndex + "?c=" + cat, new JsonHttpResponseHandler() {
                     @Override
@@ -148,6 +143,7 @@ public class MainActivity extends AppCompatActivity
                         } finally {
                             recyclerView.stopRefresh();
                             recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+
                         }
                     }
 
@@ -181,6 +177,12 @@ public class MainActivity extends AppCompatActivity
                 } finally {
                     recyclerView.stopRefresh();
                     recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            recyclerView.smoothScrollToPosition(0);
+                        }
+                    }, 100);
                 }
             }
 
@@ -189,6 +191,7 @@ public class MainActivity extends AppCompatActivity
                 super.onFailure(statusCode, headers, responseString, throwable);
                 recyclerView.stopRefresh();
                 recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+                recyclerView.setSelection(0);
             }
         });
     }
@@ -256,6 +259,7 @@ public class MainActivity extends AppCompatActivity
                     .load(imageUrl)
                     .listener(mRequestListener)
                     .into(iv);
+            Log.e(TAG, "??????????" + imageUrl);
         } else {
             iv.setImageDrawable(null);
         }
@@ -294,7 +298,7 @@ public class MainActivity extends AppCompatActivity
                 public void onClick(View v) {
                     addOne.setVisibility(View.VISIBLE);
                     addOne.startAnimation(animation);
-                    new Handler().postDelayed(new Runnable() {
+                    handler.postDelayed(new Runnable() {
                         public void run() {
                             addOne.setVisibility(View.GONE);
                         }
@@ -304,7 +308,8 @@ public class MainActivity extends AppCompatActivity
             Joke joke = (Joke) item;
             text.setText(joke.text);
             if (!TextUtils.isEmpty(joke.image)) {
-                Picasso.with(mContext)
+                Glide.with(mContext)
+                        .asBitmap()
                         .load(joke.image)
 //                        .resize(100, 200)
 //                        .centerCrop()
