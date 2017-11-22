@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.annotation.Nullable;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
 import android.support.design.widget.Snackbar;
@@ -18,41 +17,42 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.engine.GlideException;
-import com.bumptech.glide.request.RequestListener;
-import com.bumptech.glide.request.target.Target;
 import com.holenzhou.pullrecyclerview.BaseRecyclerAdapter;
 import com.holenzhou.pullrecyclerview.BaseViewHolder;
 import com.holenzhou.pullrecyclerview.PullRecyclerView;
 import com.holenzhou.pullrecyclerview.layoutmanager.XLinearLayoutManager;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.JsonHttpResponseHandler;
+import com.qq.e.ads.nativ.ADSize;
+import com.qq.e.ads.nativ.NativeExpressAD;
+import com.qq.e.ads.nativ.NativeExpressADView;
+import com.qq.e.comm.util.AdError;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import cz.msebera.android.httpclient.Header;
 
 public class MainActivity extends AppCompatActivity
-        implements NavigationView.OnNavigationItemSelectedListener, FullScreenImageGalleryActivity.FullScreenImageLoader {
+        implements NavigationView.OnNavigationItemSelectedListener, FullScreenImageGalleryActivity.FullScreenImageLoader, NativeExpressAD.NativeExpressADListener {
 
     private static final String TAG = "MainActivity";
     private PullRecyclerView recyclerView;
-    private ArrayList<Joke> mDataList = new ArrayList<>();
+    private ArrayList<Object> mDataList = new ArrayList<>();
     private int pageIndex = 1;
     private int pageSize = 5;
     private GridListAdapter mAdapter;
@@ -60,6 +60,14 @@ public class MainActivity extends AppCompatActivity
     private int currentCat;
     private AsyncHttpClient client = null;
     private Handler handler;
+    //广告
+    private NativeExpressAD mADManager;
+    private List<NativeExpressADView> mAdViewList;
+    private HashMap<NativeExpressADView, Integer> mAdViewPositionMap = new HashMap<NativeExpressADView, Integer>();
+    public static final int AD_COUNT = 3;    // 加载广告的条数，取值范围为[1, 10]
+    public static int FIRST_AD_POSITION = 3; // 第一条广告的位置
+    public static int ITEMS_PER_AD = 10;     // 每间隔10个条目插入一条广告
+    //*/广告
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,6 +87,7 @@ public class MainActivity extends AppCompatActivity
         FullScreenImageGalleryActivity.setFullScreenImageLoader(this);
 
         createGridOn(R.id.rv);
+        initAD();
     }
 
     private void setupToolBar() {
@@ -158,7 +167,14 @@ public class MainActivity extends AppCompatActivity
         recyclerView.postRefreshing();
     }
 
+    private void initAD() {
+        final float density = getResources().getDisplayMetrics().density;
+        ADSize adSize = new ADSize((int) (getResources().getDisplayMetrics().widthPixels / density), 340); // 宽、高的单位是dp。ADSize不支持MATCH_PARENT or WRAP_CONTENT，必须传入实际的宽高
+        mADManager = new NativeExpressAD(this, adSize, Constants.APPID, Constants.NativeExpressPosID, this);
+    }
+
     private void refresh() {
+        mADManager.loadAD(6); //加载广告条数
         client.get("http://192.168.0.103:50001/api/p/1?c=" + cat, new JsonHttpResponseHandler() {
             @Override
             public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
@@ -264,28 +280,90 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    RequestListener mRequestListener = new RequestListener() {
-        @Override
-        public boolean onLoadFailed(@Nullable GlideException e, Object model, Target target, boolean isFirstResource) {
-            Log.d(TAG, "onException: " + e.toString() + "  model:" + model + " isFirstResource: " + isFirstResource);
-            return false;
-        }
 
-        @Override
-        public boolean onResourceReady(Object resource, Object model, Target target, DataSource dataSource, boolean isFirstResource) {
-            Log.e(TAG, "model:" + model + " isFirstResource: " + isFirstResource);
-            return false;
+    @Override
+    public void onNoAD(AdError adError) {
+        Log.i(TAG, String.format("onNoAD, error code: %d, error msg: %s", adError.getErrorCode(),
+                adError.getErrorMsg()));
+    }
+
+    @Override
+    public void onADLoaded(List<NativeExpressADView> adList) {
+        Log.i(TAG, "onADLoaded: " + adList.size());
+        mAdViewList = adList;
+        for (int i = 0; i < mAdViewList.size(); i++) {
+            int position = FIRST_AD_POSITION + ITEMS_PER_AD * i;
+            if (position < mDataList.size()) {
+                mAdViewPositionMap.put(mAdViewList.get(i), position); // 把每个广告在列表中位置记录下来
+                mAdapter.addADViewToPosition(position, mAdViewList.get(i));
+            }
         }
-    };
+        mAdapter.notifyDataSetChanged();
+    }
+
+    @Override
+    public void onRenderFail(NativeExpressADView adView) {
+        Log.i(TAG, "onRenderFail: " + adView.toString());
+    }
+
+    @Override
+    public void onRenderSuccess(NativeExpressADView adView) {
+        Log.i(TAG, "onRenderSuccess: " + adView.toString());
+    }
+
+    @Override
+    public void onADExposure(NativeExpressADView adView) {
+        Log.i(TAG, "onADExposure: " + adView.toString());
+    }
+
+    @Override
+    public void onADClicked(NativeExpressADView adView) {
+        Log.i(TAG, "onADClicked: " + adView.toString());
+    }
+
+    @Override
+    public void onADClosed(NativeExpressADView adView) {
+        Log.i(TAG, "onADClosed: " + adView.toString());
+        if (mAdapter != null) {
+            int removedPosition = mAdViewPositionMap.get(adView);
+            mAdapter.removeADView(removedPosition, adView);
+        }
+    }
+
+    @Override
+    public void onADLeftApplication(NativeExpressADView adView) {
+        Log.i(TAG, "onADLeftApplication: " + adView.toString());
+    }
+
+    @Override
+    public void onADOpenOverlay(NativeExpressADView adView) {
+        Log.i(TAG, "onADOpenOverlay: " + adView.toString());
+    }
 
     class GridListAdapter<T> extends BaseRecyclerAdapter<T> {
+
+        public static final int TYPE_AD = 10086;
 
         public GridListAdapter(Context context, int layoutResId, List<T> data) {
             super(context, layoutResId, data);
         }
 
         @Override
+        public int getItemViewType(int position) {
+            if (position < mDataList.size()) {
+                if (mDataList.get(position) instanceof NativeExpressADView) {
+                    return TYPE_AD;
+                }
+            }
+            return super.getItemViewType(position);
+        }
+
+        @Override
         protected void convert(BaseViewHolder holder, final T item, final int pos) {
+            if (!(item instanceof Joke)) {
+                convertToAd(holder, item, pos);
+                return;
+            }
             ImageView avatarView = holder.getView(R.id.iv);
             TextView text = holder.getView(R.id.text_content);
             final Animation animation = AnimationUtils.loadAnimation(getBaseContext(), R.anim.add_score);
@@ -331,12 +409,48 @@ public class MainActivity extends AppCompatActivity
             });
         }
 
+        private void convertToAd(BaseViewHolder holder, T item, int pos) {
+
+            final NativeExpressADView adView = (NativeExpressADView) mDataList.get(pos);
+            mAdViewPositionMap.put(adView, pos); // 广告在列表中的位置是可以被更新的
+            ViewGroup container = (ViewGroup) holder.convertView;
+            if (container.getChildCount() > 0
+                    && container.getChildAt(0) == adView) {
+                return;
+            }
+            if (container.getChildCount() > 0) {
+                container.removeAllViews();
+            }
+
+            if (adView.getParent() != null) {
+                ((ViewGroup) adView.getParent()).removeView(adView);
+            }
+            container.addView(adView);
+            adView.render(); // 调用render方法后sdk才会开始展示广告
+        }
+
         private ArrayList<String> extractImages() {
             ArrayList<String> list = new ArrayList<>();
             for (int i = 0; i < mDataList.size(); i++) {
-                list.add(mDataList.get(i).image);
+                Object item = mDataList.get(i);
+                if (item instanceof Joke) {
+                    Joke joke = (Joke) item;
+                    list.add(joke.image);
+                }
             }
             return list;
+        }
+
+        public void addADViewToPosition(int position, NativeExpressADView adView) {
+            if (position >= 0 && position < mDataList.size() && adView != null) {
+                mDataList.add(position, adView);
+            }
+        }
+
+        public void removeADView(int position, NativeExpressADView adView) {
+            mDataList.remove(position);
+            mAdapter.notifyItemRemoved(position); // position为adView在当前列表中的位置
+            mAdapter.notifyItemRangeChanged(0, mDataList.size() - 1);
         }
     }
 
@@ -344,7 +458,6 @@ public class MainActivity extends AppCompatActivity
         public String image;
         public String text;
         public List<Comment> comments;
-
 
         public Joke(JSONObject o) {
             try {
