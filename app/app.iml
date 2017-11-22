@@ -114,6 +114,7 @@
     <orderEntry type="library" exported="" name="support-core-ui-25.3.1" level="project" />
     <orderEntry type="library" exported="" name="cardview-v7-25.3.1" level="project" />
     <orderEntry type="library" exported="" name="annotations-4.3.1" level="project" />
+    <orderEntry type="library" exported="" name="android-gif-drawable-1.2.8" level="project" />
     <orderEntry type="library" exported="" name="httpclient-4.4.1.1" level="project" />
     <orderEntry type="library" exported="" name="palette-v7-25.3.1" level="project" />
     <orderEntry type="library" exported="" scope="TEST" name="jsr305-2.0.1" level="project" />
@@ -141,7 +142,6 @@
     <orderEntry type="library" exported="" name="android-async-http-1.4.9" level="project" />
     <orderEntry type="library" exported="" name="support-compat-25.3.1" level="project" />
     <orderEntry type="library" exported="" name="animated-vector-drawable-25.3.1" level="project" />
-    <orderEntry type="module" module-name="gallery_lib" exported="" />
     <orderEntry type="module" module-name="PullRecyclerView" exported="" />
     <orderEntry type="library" exported="" name="support-annotations-25.3.1" level="project" />
   </component>

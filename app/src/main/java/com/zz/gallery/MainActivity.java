@@ -27,11 +27,10 @@ import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
-import com.etiennelawlor.imagegallery.library.activities.FullScreenImageGalleryActivity;
-import com.etiennelawlor.imagegallery.library.adapters.FullScreenImageGalleryAdapter;
 import com.holenzhou.pullrecyclerview.BaseRecyclerAdapter;
 import com.holenzhou.pullrecyclerview.BaseViewHolder;
 import com.holenzhou.pullrecyclerview.PullRecyclerView;
@@ -49,7 +48,7 @@ import java.util.List;
 import cz.msebera.android.httpclient.Header;
 
 public class MainActivity extends AppCompatActivity
-        implements NavigationView.OnNavigationItemSelectedListener, FullScreenImageGalleryAdapter.FullScreenImageLoader {
+        implements NavigationView.OnNavigationItemSelectedListener, FullScreenImageGalleryActivity.FullScreenImageLoader {
 
     private static final String TAG = "MainActivity";
     private PullRecyclerView recyclerView;
@@ -253,13 +252,13 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    public void loadFullScreenImage(final ImageView iv, String imageUrl, int width, final LinearLayout bgLinearLayout) {
+    public void loadFullScreenImage(final ImageView iv, String imageUrl) {
         if (!TextUtils.isEmpty(imageUrl)) {
-            Glide.with(iv.getContext())
+            GlideApp.with(iv.getContext())
+                    .asDrawable()
                     .load(imageUrl)
-                    .listener(mRequestListener)
+                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
                     .into(iv);
-            Log.e(TAG, "??????????" + imageUrl);
         } else {
             iv.setImageDrawable(null);
         }

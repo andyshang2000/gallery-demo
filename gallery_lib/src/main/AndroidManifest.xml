@@ -5,12 +5,6 @@
 
     <application>
 
-        <activity
-            android:name="com.etiennelawlor.imagegallery.library.activities.FullScreenImageGalleryActivity"
-            android:configChanges="orientation|keyboardHidden|screenSize"
-            android:label=""
-            android:theme="@style/Theme.ImageGallery" />
-
     </application>
 
 </manifest>

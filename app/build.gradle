@@ -39,8 +39,9 @@ dependencies {
     compile 'com.loopj.android:android-async-http:1.4.9'
     compile 'cz.msebera.android:httpclient:4.4.1.1'
     compile 'com.github.bumptech.glide:glide:4.3.1'
+    compile 'pl.droidsonroids.gif:android-gif-drawable:1.2.8'
     annotationProcessor 'com.jakewharton:butterknife-compiler:8.4.0'
     annotationProcessor 'com.github.bumptech.glide:compiler:4.3.1'
     testCompile 'junit:junit:4.12'
-    compile project(path: ':gallery_lib')
+    compile project(path: ':PullRecyclerView')
 }
