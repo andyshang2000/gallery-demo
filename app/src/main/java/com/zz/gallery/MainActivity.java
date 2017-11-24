@@ -1,19 +1,20 @@
 package com.zz.gallery;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.NavigationView;
-import android.support.design.widget.Snackbar;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
-import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -24,18 +25,26 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.holenzhou.pullrecyclerview.BaseRecyclerAdapter;
 import com.holenzhou.pullrecyclerview.BaseViewHolder;
 import com.holenzhou.pullrecyclerview.PullRecyclerView;
 import com.holenzhou.pullrecyclerview.layoutmanager.XLinearLayoutManager;
+import com.jcodecraeer.xrecyclerview.XRecyclerView;
+import com.jpeng.jptabbar.anno.NorIcons;
+import com.jpeng.jptabbar.anno.SeleIcons;
+import com.jpeng.jptabbar.anno.Titles;
 import com.loopj.android.http.AsyncHttpClient;
 import com.loopj.android.http.JsonHttpResponseHandler;
-import com.qq.e.ads.nativ.ADSize;
+import com.qq.e.ads.banner.ADSize;
+import com.qq.e.ads.banner.AbstractBannerADListener;
+import com.qq.e.ads.banner.BannerView;
 import com.qq.e.ads.nativ.NativeExpressAD;
 import com.qq.e.ads.nativ.NativeExpressADView;
 import com.qq.e.comm.util.AdError;
+import com.youth.banner.Banner;
+import com.youth.banner.listener.OnBannerListener;
+import com.youth.banner.loader.ImageLoader;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -47,11 +56,11 @@ import java.util.List;
 
 import cz.msebera.android.httpclient.Header;
 
-public class MainActivity extends AppCompatActivity
-        implements NavigationView.OnNavigationItemSelectedListener, FullScreenImageGalleryActivity.FullScreenImageLoader, NativeExpressAD.NativeExpressADListener {
+public class MainActivity extends BaseActivity
+        implements FullScreenImageGalleryActivity.FullScreenImageLoader, NativeExpressAD.NativeExpressADListener {
 
     private static final String TAG = "MainActivity";
-    private PullRecyclerView recyclerView;
+    private XRecyclerView recyclerView;
     private ArrayList<Object> mDataList = new ArrayList<>();
     private int pageIndex = 1;
     private int pageSize = 5;
@@ -64,41 +73,92 @@ public class MainActivity extends AppCompatActivity
     private NativeExpressAD mADManager;
     private List<NativeExpressADView> mAdViewList;
     private HashMap<NativeExpressADView, Integer> mAdViewPositionMap = new HashMap<NativeExpressADView, Integer>();
-    public static final int AD_COUNT = 3;    // 加载广告的条数，取值范围为[1, 10]
+    public static final int AD_COUNT = 6;    // 加载广告的条数，取值范围为[1, 10]
     public static int FIRST_AD_POSITION = 3; // 第一条广告的位置
-    public static int ITEMS_PER_AD = 10;     // 每间隔10个条目插入一条广告
+    public static int ITEMS_PER_AD = 4;     // 每间隔10个条目插入一条广告
+
+    public int firstAD = FIRST_AD_POSITION;
+    private BannerView bv;
+    private ViewGroup bannerContainer;
+    Banner banner;
     //*/广告
+    @Titles
+    private static final String[] mTitles = {"页面一", "页面二", "页面三", "页面四"};
+    @SeleIcons
+    private static final int[] mSeleIcons = {R.drawable.ic_menu_share, R.drawable.ic_menu_manage, R.drawable.ic_menu_gallery, R.drawable.ic_menu_camera};
+    @NorIcons
+    private static final int[] mNormalIcons = {R.drawable.ic_menu_share, R.drawable.ic_menu_manage, R.drawable.ic_menu_gallery, R.drawable.ic_menu_camera};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        setupHeader();
 
         client = new AsyncHttpClient();
         handler = new Handler();
         currentCat = R.id.cat_all;
 
-        setupToolBar();
-        setupFloatActionButton();
-
-        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
-        navigationView.setNavigationItemSelectedListener(this);
+        initBanner();
+        bv.loadAD();
 
         FullScreenImageGalleryActivity.setFullScreenImageLoader(this);
 
         createGridOn(R.id.rv);
-        initAD();
+        BaseActivity.requestRuntimePermission(
+                new String[]{Manifest.permission.READ_PHONE_STATE,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                new PermissionListener() {
+
+                    @Override
+                    public void onGranted() {
+                        Log.d(TAG, "init GDT");
+                        initAD();
+                    }
+
+                    @Override
+                    public void onDenied(List<String> deniedPermission) {
+                        Log.d(TAG, String.valueOf(deniedPermission));
+                    }
+                });
     }
 
-    private void setupToolBar() {
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+    private void initBanner() {
+        bannerContainer = (ViewGroup) findViewById(R.id.bannerContainer);
+        this.bv = new BannerView(this, ADSize.BANNER, Constants.APPID, Constants.BannerPosID);
+        // 注意：如果开发者的banner不是始终展示在屏幕中的话，请关闭自动刷新，否则将导致曝光率过低。
+        // 并且应该自行处理：当banner广告区域出现在屏幕后，再手动loadAD。
+//        bv.setRefresh(30);
+        bv.setADListener(new AbstractBannerADListener() {
 
-        final DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
-        drawer.addDrawerListener(toggle);
-        toggle.syncState();
+            @Override
+            public void onNoAD(AdError error) {
+                Log.i("AD_DEMO", String.format("Banner onNoAD，eCode = %d, eMsg = %s", error.getErrorCode(),
+                        error.getErrorMsg()));
+            }
+
+            @Override
+            public void onADReceiv() {
+                Log.i("AD_DEMO", "ONBannerReceive");
+            }
+        });
+        bannerContainer.addView(bv);
+    }
+
+    private void doRefreshBanner() {
+        if (bv == null) {
+            initBanner();
+            bv.loadAD();
+        }
+    }
+
+    private void doCloseBanner() {
+        bannerContainer.removeAllViews();
+        if (bv != null) {
+            bv.destroy();
+            bv = null;
+        }
     }
 
     private void setupFloatActionButton() {
@@ -106,26 +166,22 @@ public class MainActivity extends AppCompatActivity
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+                doCloseBanner();
             }
         });
     }
 
     private void createGridOn(int app_content) {
-        recyclerView = (PullRecyclerView) findViewById(app_content);
+        recyclerView = (XRecyclerView) findViewById(app_content);
         // 初始化PullRecyclerView
         recyclerView.setLayoutManager(new XLinearLayoutManager(this));
 //        recyclerView.setLayoutManager(new XGridLayoutManager(this, 3));
         mAdapter = new GridListAdapter(this, R.layout.image_thumbnail, mDataList);
         recyclerView.setAdapter(mAdapter);
-
-        recyclerView.setColorSchemeResources(R.color.colorAccent); // 设置下拉刷新的旋转圆圈的颜色
-        recyclerView.enablePullRefresh(true); // 开启下拉刷新，默认即为true，可不用设置
-        recyclerView.enableLoadDoneTip(true, R.string.load_done_tip); // 开启数据全部加载完成时的底部提示，默认为false
-        recyclerView.setOnRecyclerRefreshListener(new PullRecyclerView.OnRecyclerRefreshListener() {
+        recyclerView.addHeaderView(banner);
+        recyclerView.setLoadingListener(new XRecyclerView.LoadingListener() {
             @Override
-            public void onPullRefresh() {
+            public void onRefresh() {
                 // 模拟下拉刷新网络请求
                 refresh();
             }
@@ -133,6 +189,10 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onLoadMore() {
 
+                if (mADManager != null) {
+                    mADManager.loadAD(AD_COUNT); //加载广告条数
+                    firstAD = pageIndex * 30 + FIRST_AD_POSITION;
+                }
                 pageIndex++;
                 client.get("http://192.168.0.103:50001/api/p/" + pageIndex + "?c=" + cat, new JsonHttpResponseHandler() {
                     @Override
@@ -149,8 +209,8 @@ public class MainActivity extends AppCompatActivity
                         } catch (JSONException e) {
                             e.printStackTrace();
                         } finally {
-                            recyclerView.stopRefresh();
-                            recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+                            recyclerView.loadMoreComplete();
+                            recyclerView.setNoMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
 
                         }
                     }
@@ -158,26 +218,64 @@ public class MainActivity extends AppCompatActivity
                     @Override
                     public void onFailure(int statusCode, Header[] headers, String responseString, Throwable throwable) {
                         super.onFailure(statusCode, headers, responseString, throwable);
-                        recyclerView.stopRefresh();
-                        recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+                        recyclerView.loadMoreComplete();
+                        recyclerView.setNoMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
                     }
                 });
             }
         });
-        recyclerView.postRefreshing();
+        recyclerView.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    doRefreshBanner();
+                }
+            }
+        });
+        recyclerView.refreshComplete();
+        refresh();
+    }
+
+    private void setupHeader() {
+        List<String> images = new ArrayList<>();
+        images.add("https://camo.githubusercontent.com/72e7034bb9f3ed5e4d28c25a94adb22bb9e7cb98/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65312e706e67");
+        images.add("https://camo.githubusercontent.com/078504c5723b59c8ebe787a059853fa1a603a381/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65322e706e67");
+        images.add("https://camo.githubusercontent.com/44eeb7b3a25f1d34aa6d2ff7dd62c8f07af3b560/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65342e706e67");
+        images.add("https://camo.githubusercontent.com/a8a5a87e676880aa64626cbea3fba78853f1be31/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65352e706e67");
+        banner = (Banner) LayoutInflater.from(this).inflate(R.layout.ad_banner, (ViewGroup) findViewById(android.R.id.content), false);
+        banner.setImageLoader(new ImageLoader() {
+            @Override
+            public void displayImage(Context context, Object path, ImageView imageView) {
+                GlideApp.with(context).load(path).into(imageView);
+            }
+        });
+        banner.setImages(images);
+        banner.isAutoPlay(true);
+        banner.setDelayTime(4000);
+        banner.setOnBannerListener(new OnBannerListener() {
+            @Override
+            public void OnBannerClick(int position) {
+
+            }
+        });
+        banner.start();
     }
 
     private void initAD() {
         final float density = getResources().getDisplayMetrics().density;
-        ADSize adSize = new ADSize((int) (getResources().getDisplayMetrics().widthPixels / density), 340); // 宽、高的单位是dp。ADSize不支持MATCH_PARENT or WRAP_CONTENT，必须传入实际的宽高
+        com.qq.e.ads.nativ.ADSize adSize = new com.qq.e.ads.nativ.ADSize((int) (getResources().getDisplayMetrics().widthPixels / density) - 15, 320); // 宽、高的单位是dp。ADSize不支持MATCH_PARENT or WRAP_CONTENT，必须传入实际的宽高
         mADManager = new NativeExpressAD(this, adSize, Constants.APPID, Constants.NativeExpressPosID, this);
     }
 
     private void refresh() {
-        mADManager.loadAD(6); //加载广告条数
+        if (mADManager != null) {
+            mADManager.loadAD(AD_COUNT); //加载广告条数
+            firstAD = FIRST_AD_POSITION;
+        }
         client.get("http://192.168.0.103:50001/api/p/1?c=" + cat, new JsonHttpResponseHandler() {
             @Override
             public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
+                Log.i(TAG, "onSuccess: " + statusCode);
                 super.onSuccess(statusCode, headers, response);
                 try {
                     pageSize = response.getInt("pages");
@@ -190,8 +288,8 @@ public class MainActivity extends AppCompatActivity
                 } catch (JSONException e) {
                     e.printStackTrace();
                 } finally {
-                    recyclerView.stopRefresh();
-                    recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+                    recyclerView.refreshComplete();
+                    recyclerView.setNoMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
@@ -204,68 +302,33 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onFailure(int statusCode, Header[] headers, String responseString, Throwable throwable) {
                 super.onFailure(statusCode, headers, responseString, throwable);
-                recyclerView.stopRefresh();
-                recyclerView.enableLoadMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
-                recyclerView.setSelection(0);
+                recyclerView.refreshComplete();
+                recyclerView.setNoMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
+//                recyclerView.set
             }
         });
     }
 
-
-    @Override
-    public void onBackPressed() {
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        if (drawer.isDrawerOpen(GravityCompat.START)) {
-            drawer.closeDrawer(GravityCompat.START);
-        } else {
-            super.onBackPressed();
-        }
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
-
-    @SuppressWarnings("StatementWithEmptyBody")
-    @Override
-    public boolean onNavigationItemSelected(MenuItem item) {
-        // Handle navigation view item clicks here.
-        int id = item.getItemId();
-
-        if (id != currentCat) {
-            if (id == R.id.cat_all) {
-                cat = "";
-            } else if (id == R.id.cat_gif) {
-                cat = "搞笑GIF";
-            } else if (id == R.id.cat_text) {
-                cat = "幽默笑话";
-            } else if (id == R.id.cat_images) {
-                cat = "奇闻怪事";
-            }
-            refresh();
-        }
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        drawer.closeDrawer(GravityCompat.START);
-        return true;
-    }
+//    public boolean onNavigationItemSelected(MenuItem item) {
+//        // Handle navigation view item clicks here.
+//        int id = item.getItemId();
+//
+//        if (id != currentCat) {
+//            if (id == R.id.cat_all) {
+//                cat = "";
+//            } else if (id == R.id.cat_gif) {
+//                cat = "搞笑GIF";
+//            } else if (id == R.id.cat_text) {
+//                cat = "幽默笑话";
+//            } else if (id == R.id.cat_images) {
+//                cat = "奇闻怪事";
+//            }
+//            refresh();
+//        }
+//        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+//        drawer.closeDrawer(GravityCompat.START);
+//        return true;
+//    }
 
     @Override
     public void loadFullScreenImage(final ImageView iv, String imageUrl) {
@@ -292,7 +355,7 @@ public class MainActivity extends AppCompatActivity
         Log.i(TAG, "onADLoaded: " + adList.size());
         mAdViewList = adList;
         for (int i = 0; i < mAdViewList.size(); i++) {
-            int position = FIRST_AD_POSITION + ITEMS_PER_AD * i;
+            int position = firstAD + ITEMS_PER_AD * i;
             if (position < mDataList.size()) {
                 mAdViewPositionMap.put(mAdViewList.get(i), position); // 把每个广告在列表中位置记录下来
                 mAdapter.addADViewToPosition(position, mAdViewList.get(i));
@@ -384,12 +447,11 @@ public class MainActivity extends AppCompatActivity
             });
             Joke joke = (Joke) item;
             text.setText(joke.text);
-            if (!TextUtils.isEmpty(joke.image)) {
-                Glide.with(mContext)
+
+            if (!TextUtils.isEmpty(joke.image) && !joke.image.toLowerCase().endsWith("null")) {
+                GlideApp.with(mContext)
                         .asBitmap()
                         .load(joke.image)
-//                        .resize(100, 200)
-//                        .centerCrop()
                         .into(avatarView);
             } else {
                 avatarView.setImageDrawable(null);
