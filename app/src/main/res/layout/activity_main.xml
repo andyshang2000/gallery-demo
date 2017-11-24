@@ -1,33 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <com.jcodecraeer.xrecyclerview.XRecyclerView
-        android:id="@+id/rv"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        tools:context="com.zz.gallery.MainActivity"
-        tools:showIn="@layout/app_bar_main" />
+        android:orientation="vertical">
 
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        <com.jcodecraeer.xrecyclerview.XRecyclerView
+            android:id="@+id/rv"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            tools:context="com.zz.gallery.MainActivity" />
 
-        <FrameLayout
-            android:id="@+id/bannerContainer"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentTop="true"></FrameLayout>
+            android:layout_weight="0">
 
-        <com.jpeng.jptabbar.JPTabBar
-            android:id="@+id/tabbar"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="#fff" />
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="0">
 
-    </FrameLayout>
+                <com.jpeng.jptabbar.JPTabBar
+                    android:id="@+id/tabbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:background="#fff" />
 
-</LinearLayout>
+                <LinearLayout
+                    android:orientation="vertical"
+                    android:id="@+id/bannerContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="1dp" />
+
+            </FrameLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <android.support.design.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        tools:context="com.zz.gallery.MainActivity">
+
+        <ImageView
+            android:id="@+id/fab"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginBottom="@dimen/fab_margin"
+            android:layout_marginRight="1dp"
+            android:visibility="gone"
+            app:srcCompat="@android:drawable/ic_menu_close_clear_cancel" />
+
+    </android.support.design.widget.CoordinatorLayout>
+</FrameLayout>

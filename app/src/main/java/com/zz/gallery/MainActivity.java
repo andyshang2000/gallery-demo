@@ -5,18 +5,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.NavigationView;
-import android.support.v4.view.GravityCompat;
-import android.support.v4.widget.DrawerLayout;
-import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
@@ -26,11 +19,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.holenzhou.pullrecyclerview.BaseRecyclerAdapter;
-import com.holenzhou.pullrecyclerview.BaseViewHolder;
-import com.holenzhou.pullrecyclerview.PullRecyclerView;
-import com.holenzhou.pullrecyclerview.layoutmanager.XLinearLayoutManager;
 import com.jcodecraeer.xrecyclerview.XRecyclerView;
+import com.jpeng.jptabbar.JPTabBar;
+import com.jpeng.jptabbar.OnTabSelectListener;
 import com.jpeng.jptabbar.anno.NorIcons;
 import com.jpeng.jptabbar.anno.SeleIcons;
 import com.jpeng.jptabbar.anno.Titles;
@@ -59,7 +50,11 @@ import cz.msebera.android.httpclient.Header;
 public class MainActivity extends BaseActivity
         implements FullScreenImageGalleryActivity.FullScreenImageLoader, NativeExpressAD.NativeExpressADListener {
 
-    private static final String TAG = "MainActivity";
+    private final String static_server = "http://192.168.0.103:8081/images/";
+    private String server = "192.168.0.103";
+    private String port = "50001";
+
+    private static final String TAG = "MainActivity";;
     private XRecyclerView recyclerView;
     private ArrayList<Object> mDataList = new ArrayList<>();
     private int pageIndex = 1;
@@ -69,6 +64,7 @@ public class MainActivity extends BaseActivity
     private int currentCat;
     private AsyncHttpClient client = null;
     private Handler handler;
+    ImageView fab;
     //广告
     private NativeExpressAD mADManager;
     private List<NativeExpressADView> mAdViewList;
@@ -80,27 +76,27 @@ public class MainActivity extends BaseActivity
     public int firstAD = FIRST_AD_POSITION;
     private BannerView bv;
     private ViewGroup bannerContainer;
-    Banner banner;
     //*/广告
     @Titles
-    private static final String[] mTitles = {"页面一", "页面二", "页面三", "页面四"};
+    private static final String[] mTitles = {"新鲜事", "搞笑GIF", "幽默笑话", "奇闻怪事"};
     @SeleIcons
     private static final int[] mSeleIcons = {R.drawable.ic_menu_share, R.drawable.ic_menu_manage, R.drawable.ic_menu_gallery, R.drawable.ic_menu_camera};
     @NorIcons
     private static final int[] mNormalIcons = {R.drawable.ic_menu_share, R.drawable.ic_menu_manage, R.drawable.ic_menu_gallery, R.drawable.ic_menu_camera};
+    private boolean bannerShown;
+    private boolean bannerReceived;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        setupHeader();
+//        setupHeader();
+        setupTabbar();
 
         client = new AsyncHttpClient();
         handler = new Handler();
         currentCat = R.id.cat_all;
-
-        initBanner();
-        bv.loadAD();
+        setupFloatActionButton();
 
         FullScreenImageGalleryActivity.setFullScreenImageLoader(this);
 
@@ -115,21 +111,39 @@ public class MainActivity extends BaseActivity
                     public void onGranted() {
                         Log.d(TAG, "init GDT");
                         initAD();
+                        doCloseBanner();
+                        refresh();
                     }
 
                     @Override
                     public void onDenied(List<String> deniedPermission) {
                         Log.d(TAG, String.valueOf(deniedPermission));
+                        refresh();
                     }
                 });
     }
 
+    private void setupTabbar() {
+        final JPTabBar mTabbar = (JPTabBar) findViewById(R.id.tabbar);
+        mTabbar.setTabListener(new OnTabSelectListener() {
+            @Override
+            public void onTabSelect(int index) {
+                if (index != currentCat) {
+                    currentCat = index;
+                    cat = mTitles[index];
+                    refresh();
+                }
+
+            }
+        });
+    }
+
     private void initBanner() {
-        bannerContainer = (ViewGroup) findViewById(R.id.bannerContainer);
         this.bv = new BannerView(this, ADSize.BANNER, Constants.APPID, Constants.BannerPosID);
+        bannerContainer = (ViewGroup) findViewById(R.id.bannerContainer);
+        bannerContainer.addView(bv);
         // 注意：如果开发者的banner不是始终展示在屏幕中的话，请关闭自动刷新，否则将导致曝光率过低。
         // 并且应该自行处理：当banner广告区域出现在屏幕后，再手动loadAD。
-//        bv.setRefresh(30);
         bv.setADListener(new AbstractBannerADListener() {
 
             @Override
@@ -139,30 +153,49 @@ public class MainActivity extends BaseActivity
             }
 
             @Override
+            public void onADExposure() {
+                findViewById(R.id.tabbar).setVisibility(View.GONE);
+                fab.setVisibility(View.VISIBLE);
+                Log.d(TAG, "banner onNOAD");
+                bannerShown = true;
+            }
+
+            @Override
             public void onADReceiv() {
+                bannerReceived = true;
                 Log.i("AD_DEMO", "ONBannerReceive");
             }
         });
-        bannerContainer.addView(bv);
     }
 
     private void doRefreshBanner() {
         if (bv == null) {
             initBanner();
             bv.loadAD();
+        } else if (bannerReceived && !bannerShown) {
+            doCloseBanner();
+            initBanner();
+            bv.loadAD();
+            bannerContainer.addView(bv);
+            bannerReceived = false;
+            bannerShown = false;
         }
     }
 
     private void doCloseBanner() {
-        bannerContainer.removeAllViews();
+        if (bannerContainer != null) {
+            bannerContainer.removeAllViews();
+        }
         if (bv != null) {
             bv.destroy();
             bv = null;
+            findViewById(R.id.tabbar).setVisibility(View.VISIBLE);
+            fab.setVisibility(View.GONE);
         }
     }
 
     private void setupFloatActionButton() {
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        fab = (ImageView) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -174,11 +207,9 @@ public class MainActivity extends BaseActivity
     private void createGridOn(int app_content) {
         recyclerView = (XRecyclerView) findViewById(app_content);
         // 初始化PullRecyclerView
-        recyclerView.setLayoutManager(new XLinearLayoutManager(this));
-//        recyclerView.setLayoutManager(new XGridLayoutManager(this, 3));
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
         mAdapter = new GridListAdapter(this, R.layout.image_thumbnail, mDataList);
         recyclerView.setAdapter(mAdapter);
-        recyclerView.addHeaderView(banner);
         recyclerView.setLoadingListener(new XRecyclerView.LoadingListener() {
             @Override
             public void onRefresh() {
@@ -194,7 +225,7 @@ public class MainActivity extends BaseActivity
                     firstAD = pageIndex * 30 + FIRST_AD_POSITION;
                 }
                 pageIndex++;
-                client.get("http://192.168.0.103:50001/api/p/" + pageIndex + "?c=" + cat, new JsonHttpResponseHandler() {
+                client.get("http://" + server + ":" + port + "/api/p/" + pageIndex + "?c=" + cat, new JsonHttpResponseHandler() {
                     @Override
                     public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
                         super.onSuccess(statusCode, headers, response);
@@ -224,7 +255,7 @@ public class MainActivity extends BaseActivity
                 });
             }
         });
-        recyclerView.setOnScrollListener(new RecyclerView.OnScrollListener() {
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
@@ -233,32 +264,6 @@ public class MainActivity extends BaseActivity
             }
         });
         recyclerView.refreshComplete();
-        refresh();
-    }
-
-    private void setupHeader() {
-        List<String> images = new ArrayList<>();
-        images.add("https://camo.githubusercontent.com/72e7034bb9f3ed5e4d28c25a94adb22bb9e7cb98/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65312e706e67");
-        images.add("https://camo.githubusercontent.com/078504c5723b59c8ebe787a059853fa1a603a381/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65322e706e67");
-        images.add("https://camo.githubusercontent.com/44eeb7b3a25f1d34aa6d2ff7dd62c8f07af3b560/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65342e706e67");
-        images.add("https://camo.githubusercontent.com/a8a5a87e676880aa64626cbea3fba78853f1be31/687474703a2f2f6f63656835316b6b752e626b742e636c6f7564646e2e636f6d2f62616e6e65725f6578616d706c65352e706e67");
-        banner = (Banner) LayoutInflater.from(this).inflate(R.layout.ad_banner, (ViewGroup) findViewById(android.R.id.content), false);
-        banner.setImageLoader(new ImageLoader() {
-            @Override
-            public void displayImage(Context context, Object path, ImageView imageView) {
-                GlideApp.with(context).load(path).into(imageView);
-            }
-        });
-        banner.setImages(images);
-        banner.isAutoPlay(true);
-        banner.setDelayTime(4000);
-        banner.setOnBannerListener(new OnBannerListener() {
-            @Override
-            public void OnBannerClick(int position) {
-
-            }
-        });
-        banner.start();
     }
 
     private void initAD() {
@@ -272,7 +277,8 @@ public class MainActivity extends BaseActivity
             mADManager.loadAD(AD_COUNT); //加载广告条数
             firstAD = FIRST_AD_POSITION;
         }
-        client.get("http://192.168.0.103:50001/api/p/1?c=" + cat, new JsonHttpResponseHandler() {
+
+        client.get("http://" + server + ":" + port + "/api/p/1?c=" + cat, new JsonHttpResponseHandler() {
             @Override
             public void onSuccess(int statusCode, Header[] headers, JSONObject response) {
                 Log.i(TAG, "onSuccess: " + statusCode);
@@ -304,31 +310,9 @@ public class MainActivity extends BaseActivity
                 super.onFailure(statusCode, headers, responseString, throwable);
                 recyclerView.refreshComplete();
                 recyclerView.setNoMore(pageIndex < pageSize); // 当剩余还有大于0页的数据时，开启上拉加载更多
-//                recyclerView.set
             }
         });
     }
-
-//    public boolean onNavigationItemSelected(MenuItem item) {
-//        // Handle navigation view item clicks here.
-//        int id = item.getItemId();
-//
-//        if (id != currentCat) {
-//            if (id == R.id.cat_all) {
-//                cat = "";
-//            } else if (id == R.id.cat_gif) {
-//                cat = "搞笑GIF";
-//            } else if (id == R.id.cat_text) {
-//                cat = "幽默笑话";
-//            } else if (id == R.id.cat_images) {
-//                cat = "奇闻怪事";
-//            }
-//            refresh();
-//        }
-//        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-//        drawer.closeDrawer(GravityCompat.START);
-//        return true;
-//    }
 
     @Override
     public void loadFullScreenImage(final ImageView iv, String imageUrl) {
@@ -523,7 +507,7 @@ public class MainActivity extends BaseActivity
 
         public Joke(JSONObject o) {
             try {
-                image = "http://192.168.0.103:8081/images/" + o.getString("image");
+                image = static_server + o.getString("image");
                 text = o.getString("text");
             } catch (JSONException e) {
                 e.printStackTrace();
